@@ -1,0 +1,18 @@
+[
+  {
+    "question": "What is a race condition in programming? Explain in two sentences.",
+    "baseline_answer": "A race condition occurs when multiple programs or threads attempt to access shared resources simultaneously without proper synchronization mechanisms, leading to unexpected and potentially disastrous results. This can manifest as race conditions in systems that rely on concurrent execution of instructions, such as operating systems, web servers, or databases, where different processes might read from or write to the same data concurrently."
+  },
+  {
+    "question": "What's the difference between a list and a tuple in Python?",
+    "baseline_answer": "In Python, both lists and tuples are used to store collections of items, but they have some key differences in terms of syntax and usage.\n\nA **list** is an ordered collection of items that can be accessed using indexing. Lists are defined using square brackets `[]` and can contain elements of different data types (like integers, strings, floats, etc.). Lists are mutable, meaning you can change their contents after they are created.\n\nHere's an example of a simple list:\n\n```python\nfruits = [\"apple\", \"banana\", \"cherry\"]\n```\n\nOn the other hand, a **tuple** is also an ordered collection of items, but it's immutable. Tuples are defined using parentheses `()`, and unlike lists, they"
+  },
+  {
+    "question": "Write a Python function that checks if a string is a palindrome.",
+    "baseline_answer": "Certainly! Below is a Python function that checks if a given string is a palindrome:\n\n```python\ndef is_palindrome(s):\n    \"\"\"\n    Check if the input string s is a palindrome.\n    \n    A palindrome is a word, phrase, number, or other sequence of characters that reads the same forward and backward (ignoring spaces, punctuation, and capitalization).\n    \n    Args:\n        s (str): The input string to check.\n        \n    Returns:\n        bool: True if the input string is a palindrome, False otherwise.\n    \"\"\"\n    # Remove all non-alphanumeric characters and convert to lowercase\n    cleaned_s = ''.join(char.lower() for char in s if char.isalnum())\n    \n    # Compare the cleaned string with its"
+  },
+  {
+    "question": "What does the @property decorator do in Python?",
+    "baseline_answer": "The `@property` decorator in Python is used to create an attribute that can be accessed like a method but cannot be modified directly. This is particularly useful when you want to encapsulate data and methods into a single object, or when you want to provide a convenient way for other parts of your code to access this data.\n\nHere's how it works:\n\n1. **Encapsulation**: The `@property` decorator creates a new attribute on the class that represents the property of the object. This allows you to define getter (read-only) and setter (write-only) methods for the property.\n\n2. **Read-Only Attribute**:\n   - When you use the `getter` method (`@property`) with a string value, Python will return"
+  }
+]
