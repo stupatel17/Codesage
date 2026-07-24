@@ -8,7 +8,7 @@ Just getting started — Phase 1 in progress.
 
 ## Progress Log
 
-### Phase 1 — Baseline
+[x] Phase 1 — Baseline
 - Loaded Qwen2.5-0.5B-Instruct via Hugging Face `transformers`
 - Confirmed correct prompt formatting via `apply_chat_template`
   (Qwen expects `<|im_start|>role ... <|im_end|>` structure)
@@ -18,4 +18,4 @@ Just getting started — Phase 1 in progress.
   (e.g. "explain in two sentences" produced a full paragraph) — a concrete
   target for improvement once we get to fine-tuning/DPO
 
-- [x] Phase 2 — Synthetic Q&A dataset (~250 examples) generated from real Flask source via Groq, with automated review/cleanup
+[x] Phase 2 — Synthetic Q&A dataset (~250 examples) generated from real Flask source via Groq, with automated review/cleanup
