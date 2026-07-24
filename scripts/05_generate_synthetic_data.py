@@ -1,26 +1,21 @@
 import json
 import os
+import re
 import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from groq import Groq
+from groq import Groq, RateLimitError
 
 load_dotenv()
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-MODEL = "llama-3.3-70b-versatile"  # the strong model generating our training data
-
-# How many functions to generate examples from. Starting small and
-# deliberately -- verify quality before spending your rate limit on hundreds.
-NUM_EXAMPLES = 20
+MODEL = "llama-3.3-70b-versatile"
+QUESTIONS_PER_FUNCTION = 2
+OUTPUT_PATH = Path("data/synthetic_qa.jsonl")
 
 
 def build_generation_prompt(function_entry: dict) -> str:
-    """
-    Construct the prompt that asks Groq to invent a realistic developer
-    question about this specific function, grounded in its real code.
-    """
     return f"""You are helping build a training dataset for a coding assistant.
 
 Given this real function from the Flask web framework:
@@ -34,65 +29,98 @@ Docstring:
 Source code:
 {function_entry['source_code']}
 
-Write ONE realistic question a developer might ask about this function
-(e.g. "how do I use X", "why does X do Y", "what happens if I don't call X"),
-and a clear, accurate, concise answer based ONLY on the code and docstring above.
+Write {QUESTIONS_PER_FUNCTION} DIFFERENT realistic questions a developer might ask
+about this function -- covering different angles (e.g. one "how do I use X",
+one "what happens if X fails/misused", one "why does X exist" -- pick whichever
+angles genuinely make sense for this specific function). For each question, give
+a clear, accurate, concise answer based ONLY on the code and docstring above.
+Do not use documentation markup (no backticks, no :attr:/:func: syntax) --
+plain natural language only. Do not hedge with words like "presumably" or
+"probably" -- state facts directly.
 
-Respond with ONLY valid JSON, no other text, in exactly this format:
-{{"question": "...", "answer": "..."}}"""
+Respond with ONLY a valid JSON array, no other text, in exactly this format:
+[{{"question": "...", "answer": "..."}}, {{"question": "...", "answer": "..."}}]"""
 
 
-def generate_qa_pair(function_entry: dict) -> dict | None:
+def parse_wait_seconds(error_message: str, default: int = 360) -> int:
+    """
+    Groq's rate-limit error message includes a suggested wait time like
+    'Please try again in 5m57.696s'. Parse that out instead of guessing,
+    so we wait exactly as long as needed and not a second longer.
+    """
+    match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", error_message)
+    if not match:
+        return default
+    minutes = int(match.group(1)) if match.group(1) else 0
+    seconds = float(match.group(2))
+    return int(minutes * 60 + seconds) + 5  # small safety buffer
+
+
+def generate_qa_pairs(function_entry: dict, max_retries: int = 5) -> list[dict]:
     prompt = build_generation_prompt(function_entry)
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-    )
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            parsed = json.loads(response.choices[0].message.content)
+            return [
+                {
+                    "question": item["question"],
+                    "answer": item["answer"],
+                    "source_function": function_entry["function_name"],
+                    "source_file": function_entry["file"],
+                }
+                for item in parsed
+            ]
+        except RateLimitError as e:
+            wait = parse_wait_seconds(str(e))
+            print(f"  Rate limited (attempt {attempt}/{max_retries}). Waiting {wait}s...")
+            time.sleep(wait)
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f"  Skipping {function_entry['function_name']} — bad response: {e}")
+            return []
 
-    raw_text = response.choices[0].message.content
-
-    try:
-        parsed = json.loads(raw_text)
-        return {
-            "question": parsed["question"],
-            "answer": parsed["answer"],
-            "source_function": function_entry["function_name"],
-            "source_file": function_entry["file"],
-        }
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"  Skipping {function_entry['function_name']} — bad response: {e}")
-        return None
+    print(f"  Giving up on {function_entry['function_name']} after {max_retries} rate-limit retries.")
+    return []
 
 
 # ---------------------------------------------------------------
-# Load extracted functions, generate one Q&A pair per function
+# RESUME SUPPORT: figure out which functions already have saved
+# output, so re-running this script never wastes tokens redoing work.
 # ---------------------------------------------------------------
+processed_keys = set()
+if OUTPUT_PATH.exists():
+    with open(OUTPUT_PATH) as f:
+        for line in f:
+            entry = json.loads(line)
+            processed_keys.add((entry["source_function"], entry["source_file"]))
+    print(f"Resuming: {len(processed_keys)} functions already have saved output, skipping them.\n")
+
 with open("data/extracted_functions.json") as f:
     all_functions = json.load(f)
 
-functions_to_use = all_functions[:NUM_EXAMPLES]
+remaining = [
+    func for func in all_functions
+    if (func["function_name"], func["file"]) not in processed_keys
+]
+print(f"{len(remaining)} functions remaining to process.\n")
 
-output_path = Path("data/synthetic_qa.jsonl")
 generated_count = 0
+with open(OUTPUT_PATH, "a") as out_file:  # APPEND, never overwrite what's already saved
+    for i, func in enumerate(remaining, start=1):
+        print(f"[{i}/{len(remaining)}] Generating for: {func['function_name']} ({func['file']})")
+        qa_pairs = generate_qa_pairs(func)
 
-with open(output_path, "w") as out_file:
-    for i, func in enumerate(functions_to_use, start=1):
-        print(f"[{i}/{len(functions_to_use)}] Generating for: {func['function_name']}")
-        qa_pair = generate_qa_pair(func)
-
-        if qa_pair:
-            # Write immediately, one JSON object per line (JSONL format) --
-            # if this script crashes on example 15, examples 1-14 are
-            # already safely saved to disk, not lost.
-            out_file.write(json.dumps(qa_pair) + "\n")
+        for pair in qa_pairs:
+            out_file.write(json.dumps(pair) + "\n")
             out_file.flush()
             generated_count += 1
 
-        # Free tier = 30 requests/minute = 1 every 2 seconds minimum.
-        # We sleep a bit longer to stay safely under that limit.
         time.sleep(2.5)
 
-print(f"\nDone. Generated {generated_count}/{len(functions_to_use)} examples.")
-print(f"Saved to {output_path}")
+print(f"\nDone. Generated {generated_count} new examples this run.")
+print(f"Total examples in file: {len(processed_keys) + generated_count} (approx, if none were skipped for bad responses)")

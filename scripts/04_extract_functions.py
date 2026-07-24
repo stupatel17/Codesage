@@ -4,10 +4,6 @@ from pathlib import Path
 
 FLASK_SRC = Path("../reference_repos_flask/src/flask")
 
-# We'll only look at a few well-understood files to start, rather than
-# the entire codebase -- easier to sanity-check the results by eye.
-TARGET_FILES = ["app.py", "helpers.py", "blueprints.py"]
-
 
 def extract_functions_from_file(filepath: Path):
     """
@@ -29,7 +25,7 @@ def extract_functions_from_file(filepath: Path):
             if docstring:  # skip functions with no documentation -- nothing to learn from
                 source_lines = ast.get_source_segment(source, node)
                 functions.append({
-                    "file": filepath.name,
+                    "file": str(filepath.relative_to(FLASK_SRC)),
                     "function_name": node.name,
                     "docstring": docstring,
                     "source_code": source_lines,
@@ -37,11 +33,16 @@ def extract_functions_from_file(filepath: Path):
     return functions
 
 
+# Recurse into every .py file under flask/src/flask, including subfolders
+# like sansio/ and json/ -- instead of a hardcoded file list.
+all_py_files = list(FLASK_SRC.rglob("*.py"))
+print(f"Found {len(all_py_files)} Python files total\n")
+
 all_functions = []
-for filename in TARGET_FILES:
-    filepath = FLASK_SRC / filename
+for filepath in all_py_files:
     extracted = extract_functions_from_file(filepath)
-    print(f"{filename}: found {len(extracted)} documented functions")
+    if extracted:
+        print(f"{filepath.relative_to(FLASK_SRC)}: found {len(extracted)} documented functions")
     all_functions.extend(extracted)
 
 output_path = Path("data/extracted_functions.json")

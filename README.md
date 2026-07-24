@@ -17,3 +17,5 @@ Just getting started — Phase 1 in progress.
 - Observation: base model doesn't reliably follow explicit constraints
   (e.g. "explain in two sentences" produced a full paragraph) — a concrete
   target for improvement once we get to fine-tuning/DPO
+
+- [x] Phase 2 — Synthetic Q&A dataset (~250 examples) generated from real Flask source via Groq, with automated review/cleanup
